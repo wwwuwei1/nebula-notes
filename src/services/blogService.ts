@@ -1,6 +1,27 @@
 import { supabase } from '../lib/supabase';
 import type { Comment, Post, Profile, SiteStat } from '../types';
 
+type RawProfile = Profile | Profile[] | null;
+
+const unwrapProfile = (profile: RawProfile): Profile | undefined => {
+  if (Array.isArray(profile)) {
+    return profile[0] ?? undefined;
+  }
+  return profile ?? undefined;
+};
+
+const normalizePosts = (rows: any[]): Post[] =>
+  rows.map((row) => ({
+    ...row,
+    author: unwrapProfile(row.author),
+  }));
+
+const normalizeComments = (rows: any[]): Comment[] =>
+  rows.map((row) => ({
+    ...row,
+    author: unwrapProfile(row.author),
+  }));
+
 const withAuthor = `
 id,
 title,
@@ -30,7 +51,7 @@ export const fetchRecentPosts = async (limit = 6): Promise<Post[]> => {
     .limit(limit);
 
   if (error) throw error;
-  return data ?? [];
+  return data ? normalizePosts(data) : [];
 };
 
 export const fetchAllPosts = async (search?: string): Promise<Post[]> => {
@@ -46,7 +67,7 @@ export const fetchAllPosts = async (search?: string): Promise<Post[]> => {
 
   const { data, error } = await query;
   if (error) throw error;
-  return data ?? [];
+  return data ? normalizePosts(data) : [];
 };
 
 export const fetchPostBySlug = async (slug: string): Promise<Post | null> => {
@@ -58,7 +79,12 @@ export const fetchPostBySlug = async (slug: string): Promise<Post | null> => {
     .single();
 
   if (error) throw error;
-  return data;
+  if (!data) return null;
+  return {
+    ...data,
+    author: unwrapProfile(data.author),
+    comments: data.comments ? normalizeComments(data.comments) : [],
+  };
 };
 
 export const fetchComments = async (postId: string): Promise<Comment[]> => {
@@ -71,6 +97,7 @@ export const fetchComments = async (postId: string): Promise<Comment[]> => {
       content,
       created_at,
       post_id,
+      author_id,
       author:profiles (
         id,
         username,
@@ -82,7 +109,7 @@ export const fetchComments = async (postId: string): Promise<Comment[]> => {
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  return data ? normalizeComments(data) : [];
 };
 
 export const upsertProfile = async (payload: Profile) => {
