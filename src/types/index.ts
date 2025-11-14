@@ -19,6 +19,7 @@ export type Post = {
   created_at?: string;
   author_id: string;
   author?: Profile;
+  comments?: Comment[];
 };
 
 export type Comment = {
